@@ -6,6 +6,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use App\Models\Membership;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class User extends Authenticatable
 {
@@ -44,5 +47,20 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(Membership::class);
+    }
+
+    public function colocations(): BelongsToMany
+    {
+        return $this->belongsToMany(Colocation::class, 'memberships')
+            ->withPivot('role', 'joined_at', 'left_at')
+            ->withTimestamps();
+    }
+    public function activeMembership()
+    {
+        return $this->hasOne(Membership::class)->whereNull('left_at');
     }
 }
