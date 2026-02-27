@@ -3,6 +3,9 @@
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ColocationController;
+use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\ExpenseController;
+
 
 Route::get('/', function () {
     return view('welcome');
@@ -27,4 +30,37 @@ Route::get('/colocations/{colocation}', [ColocationController::class, 'show'])->
     Route::middleware('auth')->group(function () {
     Route::get('/colocations/{colocation}', [ColocationController::class, 'show'])->name('colocations.show');
 });
+Route::post('/colocations/{colocation}/leave', [ColocationController::class, 'leave'])
+    ->name('colocations.leave');
+Route::post('/colocations/{colocation}/cancel', [ColocationController::class, 'cancel'])
+    ->name('colocations.cancel');
+
+//invitation Route
+
+Route::middleware('auth')->group(function () {
+    Route::post('/colocations/{colocation}/invite', [InvitationController::class, 'store'])
+        ->name('invitations.store');
+
+    Route::get('/invites/{token}', [InvitationController::class, 'show'])
+        ->name('invitations.show');
+
+    Route::post('/invites/{token}/accept', [InvitationController::class, 'accept'])
+        ->name('invitations.accept');
+
+    Route::post('/invites/{token}/refuse', [InvitationController::class, 'refuse'])
+        ->name('invitations.refuse');
+    Route::post('/colocations/{colocation}/expenses', [ExpenseController::class, 'store'])
+        ->name('expenses.store');
+});
+
+
+
+
+Route::post('/colocations/{colocation}/invite', [InvitationController::class, 'store'])
+    ->name('invitations.store');
+
+
+
+
+
 require __DIR__.'/auth.php';

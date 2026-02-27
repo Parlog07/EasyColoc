@@ -63,4 +63,8 @@ class User extends Authenticatable
     {
         return $this->hasOne(Membership::class)->whereNull('left_at');
     }
+    public function expensesPaid()
+    {
+        return $this->hasMany(Expense::class, 'payer_id');
+    }
 }

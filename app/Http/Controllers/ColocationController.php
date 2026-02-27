@@ -78,13 +78,58 @@ class ColocationController extends Controller
             ->where('user_id', $userId)
             ->whereNull('left_at')
             ->exists();
+        $pendingInvites = $colocation->invitations()
+            ->where('status', 'pending')
+            ->where('expires_at', '>', now())
+            ->orderByDesc('created_at')
+            ->get();
 
         abort_unless($isMember, 403);
 
         $members = $colocation->users()
             ->wherePivotNull('left_at')
             ->get();
+        $expenses = $colocation->expenses()
+            ->with(['payer', 'category'])
+            ->orderByDesc('expense_date')
+            ->get();
 
-        return view('colocations.show', compact('colocation', 'members'));
+        return view('colocations.show', compact('colocation', 'members', 'pendingInvites', 'expenses'));    }
+    public function leave(Colocation $colocation, Request $request)
+    {
+        $user = $request->user();
+
+        $membership = $colocation->memberships()
+            ->where('user_id', $user->id)
+            ->whereNull('left_at')
+            ->first();
+
+        abort_unless($membership, 403);
+
+        // Owner cannot leave
+        abort_if($membership->role === 'owner', 403);
+
+        $membership->update([
+            'left_at' => now(),
+        ]);
+
+        return redirect()->route('colocations.create')
+            ->with('success', 'You left the colocation.');
+    }
+
+    public function cancel(Colocation $colocation, Request $request)
+    {
+        abort_unless($colocation->owner_id === $request->user()->id, 403);
+
+        DB::transaction(function () use ($colocation) {
+            $colocation->update(['status' => 'cancelled']);
+
+            $colocation->memberships()
+                ->whereNull('left_at')
+                ->update(['left_at' => now()]);
+        });
+
+        return redirect()->route('colocations.create')
+            ->with('success', 'Colocation cancelled successfully.');
     }
 }
