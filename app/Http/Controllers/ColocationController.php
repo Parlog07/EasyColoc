@@ -94,7 +94,33 @@ class ColocationController extends Controller
             ->orderByDesc('expense_date')
             ->get();
 
-        return view('colocations.show', compact('colocation', 'members', 'pendingInvites', 'expenses'));    }
+        $activeMembers = $colocation->users()
+        ->wherePivotNull('left_at')
+        ->get();
+
+        $totalExpenses = $expenses->sum('amount');
+
+        $memberCount = $activeMembers->count();
+
+        $share = $memberCount > 0 ? $totalExpenses / $memberCount : 0;
+
+        $balances = [];
+
+        foreach ($activeMembers as $member) {
+            $paid = $expenses
+                ->where('payer_id', $member->id)
+                ->sum('amount');
+
+            $balance = $paid - $share;
+
+            $balances[] = [
+                'user' => $member,
+                'paid' => $paid,
+                'balance' => $balance,
+            ];
+        }
+
+        return view('colocations.show', compact('colocation', 'members', 'pendingInvites', 'expenses', 'balances', 'share', 'totalExpenses'));    }
     public function leave(Colocation $colocation, Request $request)
     {
         $user = $request->user();
@@ -105,8 +131,6 @@ class ColocationController extends Controller
             ->first();
 
         abort_unless($membership, 403);
-
-        // Owner cannot leave
         abort_if($membership->role === 'owner', 403);
 
         $membership->update([

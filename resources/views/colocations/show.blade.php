@@ -93,6 +93,40 @@
     </div>
 @endif
 
+@if(isset($balances))
+    <div class="mt-8">
+        <h2 class="text-xl font-semibold mb-3">Balances</h2>
+
+        <p>Total expenses: <b>{{ number_format($totalExpenses, 2) }}</b></p>
+        <p>Share per member: <b>{{ number_format($share, 2) }}</b></p>
+
+        <div class="mt-4 overflow-x-auto">
+            <table class="w-full border">
+                <thead>
+                    <tr class="bg-gray-100">
+                        <th class="border p-2 text-left">Member</th>
+                        <th class="border p-2 text-right">Paid</th>
+                        <th class="border p-2 text-right">Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($balances as $b)
+                        <tr>
+                            <td class="border p-2">{{ $b['user']->name }}</td>
+                            <td class="border p-2 text-right">{{ number_format($b['paid'], 2) }}</td>
+                            <td class="border p-2 text-right 
+                                @if($b['balance'] < 0) text-red-600 @else text-green-600 @endif">
+                                {{ number_format($b['balance'], 2) }}
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+@endif
+
+
 @if(isset($expenses))
     <div class="mt-8">
         <h2 class="text-xl font-semibold mb-3">Expenses</h2>
