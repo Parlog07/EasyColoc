@@ -120,7 +120,45 @@ class ColocationController extends Controller
             ];
         }
 
-        return view('colocations.show', compact('colocation', 'members', 'pendingInvites', 'expenses', 'balances', 'share', 'totalExpenses'));    }
+            $creditors = [];
+        $debtors = [];
+
+        foreach ($balances as $b) {
+            if ($b['balance'] > 0.01) {
+                $creditors[] = [
+                    'user' => $b['user'],
+                    'amount' => $b['balance']
+                ];
+            } elseif ($b['balance'] < -0.01) {
+                $debtors[] = [
+                    'user' => $b['user'],
+                    'amount' => abs($b['balance'])
+                ];
+            }
+        }
+
+        $settlements = [];
+
+        foreach ($debtors as &$debtor) {
+            foreach ($creditors as &$creditor) {
+
+                if ($debtor['amount'] == 0) continue;
+                if ($creditor['amount'] == 0) continue;
+
+                $payAmount = min($debtor['amount'], $creditor['amount']);
+
+                $settlements[] = [
+                    'from' => $debtor['user'],
+                    'to' => $creditor['user'],
+                    'amount' => $payAmount
+                ];
+
+                $debtor['amount'] -= $payAmount;
+                $creditor['amount'] -= $payAmount;
+            }
+        }
+
+        return view('colocations.show', compact('colocation', 'members', 'pendingInvites', 'expenses', 'balances', 'share', 'totalExpenses', 'settlements'));    }
     public function leave(Colocation $colocation, Request $request)
     {
         $user = $request->user();

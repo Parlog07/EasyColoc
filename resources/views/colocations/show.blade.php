@@ -126,6 +126,24 @@
     </div>
 @endif
 
+@if(isset($settlements) && count($settlements) > 0)
+    <div class="mt-8">
+        <h2 class="text-xl font-semibold mb-3">Who Owes Who</h2>
+
+        <ul class="space-y-2">
+            @foreach($settlements as $s)
+                <li class="border rounded p-3">
+                    <b>{{ $s['from']->name }}</b> owes 
+                    <b>{{ $s['to']->name }}</b>
+                    <span class="text-green-600 font-semibold">
+                        {{ number_format($s['amount'], 2) }}
+                    </span>
+                </li>
+            @endforeach
+        </ul>
+    </div>
+@endif
+
 
 @if(isset($expenses))
     <div class="mt-8">
