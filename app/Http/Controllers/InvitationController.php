@@ -7,6 +7,7 @@ use App\Models\Colocation;
 use App\Models\Invitation;
 use App\Models\Membership;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -15,32 +16,25 @@ class InvitationController extends Controller
     public function store(Colocation $colocation, Request $request)
     {
         abort_unless($colocation->owner_id === $request->user()->id, 403);
+        abort_if($colocation->status !== 'active', 422, 'Colocation is not active.');
 
         $data = $request->validate([
-            'email' => ['required', 'email', 'max:255'],
+            'email' => ['required', 'email:rfc,dns', 'max:255'],
         ]);
+
+        $token = $this->generateUniqueToken();
 
         $invitation = Invitation::create([
             'colocation_id' => $colocation->id,
-            'email' => $data['email'],
-            'token' => Str::random(40),
+            'email' => strtolower($data['email']),
+            'token' => $token,
             'status' => 'pending',
             'expires_at' => now()->addHour(),
         ]);
 
-        Mail::to($data['email'])->send(new InvitationMail($invitation));
+        Mail::to($invitation->email)->send(new InvitationMail($invitation));
 
-        return back()->with('success', 'Invitation sent.');
-    }
-
-    public function show(string $token, Request $request)
-    {
-        $invitation = Invitation::where('token', $token)->firstOrFail();
-        if ($invitation->status === 'pending' && now()->greaterThan($invitation->expires_at)) {
-        $invitation->update(['status' => 'expired']);
-        }
-
-        return view('invitations.show', compact('invitation'));
+        return back()->with('success', 'Invitation email sent successfully.');
     }
 
     public function accept(string $token, Request $request)
@@ -48,43 +42,53 @@ class InvitationController extends Controller
         $user = $request->user();
         $invitation = Invitation::where('token', $token)->firstOrFail();
 
-        // Basic checks
         if ($invitation->status !== 'pending') {
-            return back()->withErrors(['msg' => 'Invitation is no longer valid.']);
+            return redirect()->route('dashboard')->withErrors(['msg' => 'Invitation is no longer valid.']);
         }
 
         if (now()->greaterThan($invitation->expires_at)) {
             $invitation->update(['status' => 'expired']);
-            return back()->withErrors(['msg' => 'Invitation expired.']);
+
+            return redirect()->route('dashboard')->withErrors(['msg' => 'Invitation expired.']);
         }
 
-        if ($user->email !== $invitation->email) {
-            abort(403); // email mismatch
+        if (strtolower($user->email) !== strtolower($invitation->email)) {
+            abort(403, 'Invitation email does not match your account.');
         }
 
-        $hasActive = $user->memberships()
+        $alreadyInActiveColocation = $user->memberships()
             ->whereNull('left_at')
-            ->whereHas('colocation', fn($q) => $q->where('status', 'active'))
+            ->whereHas('colocation', fn ($query) => $query->where('status', 'active'))
             ->exists();
 
-        if ($hasActive) {
-            return back()->withErrors(['msg' => 'You already have an active colocation.']);
+        if ($alreadyInActiveColocation) {
+            return redirect()->route('dashboard')->withErrors([
+                'msg' => 'You already have an active colocation.',
+            ]);
         }
 
-        Membership::create([
-            'user_id' => $user->id,
-            'colocation_id' => $invitation->colocation_id,
-            'role' => 'member',
-            'joined_at' => now(),
-        ]);
+        DB::transaction(function () use ($invitation, $user) {
+            $invitation->refresh();
 
-        $invitation->update([
-            'status' => 'accepted',
-            'accepted_by_user_id' => $user->id,
-        ]);
+            if ($invitation->status !== 'pending') {
+                abort(422, 'Invitation is no longer valid.');
+            }
+
+            Membership::create([
+                'user_id' => $user->id,
+                'colocation_id' => $invitation->colocation_id,
+                'role' => 'member',
+                'joined_at' => now(),
+            ]);
+
+            $invitation->update([
+                'status' => 'accepted',
+                'accepted_by_user_id' => $user->id,
+            ]);
+        });
 
         return redirect()->route('colocations.show', $invitation->colocation_id)
-            ->with('success', 'Invitation accepted.');
+            ->with('success', 'Invitation accepted successfully.');
     }
 
     public function refuse(string $token, Request $request)
@@ -93,15 +97,30 @@ class InvitationController extends Controller
         $invitation = Invitation::where('token', $token)->firstOrFail();
 
         if ($invitation->status !== 'pending') {
-            return back()->withErrors(['msg' => 'Invitation is no longer valid.']);
+            return redirect()->route('dashboard')->withErrors(['msg' => 'Invitation is no longer valid.']);
         }
 
-        if ($user->email !== $invitation->email) {
-            abort(403);
+        if (now()->greaterThan($invitation->expires_at)) {
+            $invitation->update(['status' => 'expired']);
+
+            return redirect()->route('dashboard')->withErrors(['msg' => 'Invitation expired.']);
+        }
+
+        if (strtolower($user->email) !== strtolower($invitation->email)) {
+            abort(403, 'Invitation email does not match your account.');
         }
 
         $invitation->update(['status' => 'refused']);
 
         return redirect()->route('dashboard')->with('success', 'Invitation refused.');
+    }
+
+    private function generateUniqueToken(): string
+    {
+        do {
+            $token = Str::random(40);
+        } while (Invitation::where('token', $token)->exists());
+
+        return $token;
     }
 }
